@@ -5,9 +5,10 @@ desktop: Hyprland has a single seat, so an agent's click moves *your*
 pointer. This Omarchy shell plugin frames every screen in the theme's accent
 while an agent has its hands on the desktop, so you know to keep yours off.
 
-- The frame sits on the Overlay layer, above windows and bars, and takes no
-  input: clicks and scrolls go through to what is under it.
-- It follows the theme's accent and fades in and out (no fade with
+- The frame is four thin strips on the Overlay layer, above windows and bars,
+  always mapped so that showing them is instant. They take no input: clicks
+  and scrolls go through to what is under them.
+- It follows the theme's accent, shows at once and fades out (no fade with
   `omarchy toggle animations` off).
 - Looking is not touching: screenshots and accessibility reads do not light it.
 
@@ -18,10 +19,17 @@ while an agent has its hands on the desktop, so you know to keep yours off.
    for `hold` seconds after a `pointer`, `keyboard`, `click_ui`, `use_bind`,
    `hypr` or `launch` call. (In `HYPRUSE_READONLY` mode none of these exist,
    so the frame never shows.)
-2. **Claude Code shell commands** that drive the desktop, through the hook in
-   `hooks/claude-code.sh`: `hyprctl dispatch` / `--batch`, `ydotool`, `wtype`,
-   `wlrctl`, `dotool`, `xdotool`. The frame stays on while such a command runs.
-   Read-only `hyprctl` calls (`activeworkspace`, `clients`...) do not count.
+2. **Claude Code**, through the hook in `hooks/claude-code.sh`, for shell
+   commands that drive the desktop (`hyprctl dispatch` / `--batch`, `ydotool`,
+   `wtype`, `wlrctl`, `dotool`, `xdotool`) and for hypruse's acting tools.
+   The frame stays on while the call runs. Read-only `hyprctl` calls
+   (`activeworkspace`, `clients`...) do not count.
+
+   The hook tells the plugin over IPC and waits 150 ms before letting the
+   call go, so the frame is up *before* the desktop moves; the hypruse beacon
+   alone only shows it after the first action.
+
+While the shell restarts (`omarchy restart shell`) there is no frame.
 
 ## Install
 
@@ -42,8 +50,8 @@ ln -s ~/.config/omarchy/plugins/austraz.handsoff/hooks/claude-code.sh ~/.claude/
 ```json
 {
   "hooks": {
-    "PreToolUse":  [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }],
-    "PostToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }],
+    "PreToolUse":  [{ "matcher": "Bash|mcp__hypruse__.*", "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }],
+    "PostToolUse": [{ "matcher": "Bash|mcp__hypruse__.*", "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }],
     "Stop":        [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }],
     "SessionEnd":  [{ "hooks": [{ "type": "command", "command": "~/.claude/hooks/handsoff.sh", "timeout": 5 }] }]
   }

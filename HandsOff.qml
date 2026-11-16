@@ -104,42 +104,67 @@ Item {
     interval: 250
     running: true
     repeat: true
-    onTriggered: { beacon.reload(); hookState.reload() }
+    // evaluate() too: an unchanged or missing file emits nothing, and the
+    // hold times still run out.
+    onTriggered: { beacon.reload(); hookState.reload(); root.evaluate() }
+  }
+
+  // Pushed by hooks/claude-code.sh, so the frame is up before the command
+  // runs (the file above is the fallback after a shell restart).
+  IpcHandler {
+    target: "austraz.handsoff"
+    function calls(n: string): void {
+      var v = parseInt(n) || 0
+      root.shellCalls = v
+      if (v > 0) root.shellLastTs = Date.now() / 1000
+      root.evaluate()
+    }
+    function state(): string { return root.active ? "on" : "off" }
   }
 
   // ------------------------------------------------------------ surface
+  //
+  // Four thin strips per screen, always mapped: showing the frame is only an
+  // opacity change, with no surface to create (which can lag), and nothing
+  // full-screen for the compositor to blend while it is off.
 
-  Variants {
-    model: Quickshell.screens
+  component Edge: PanelWindow {
+    required property var modelData
+    property string side: "top"
+    screen: modelData
+    visible: root.cfg.visible
+    color: "transparent"
+    anchors {
+      top: side !== "bottom"
+      bottom: side !== "top"
+      left: side !== "right"
+      right: side !== "left"
+    }
+    implicitWidth: root.cfg.width
+    implicitHeight: root.cfg.width
 
-    PanelWindow {
-      id: win
-      required property var modelData
-      screen: modelData
-      visible: root.cfg.visible && (root.active || frame.opacity > 0)
-      color: "transparent"
-      anchors { top: true; bottom: true; left: true; right: true }
+    WlrLayershell.namespace: "austraz-handsoff"
+    WlrLayershell.layer: WlrLayer.Overlay
+    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    exclusionMode: ExclusionMode.Ignore
+    exclusiveZone: 0
+    // Empty input region: clicks and scrolls go through to what is under.
+    mask: Region {}
 
-      WlrLayershell.namespace: "austraz-handsoff"
-      WlrLayershell.layer: WlrLayer.Overlay
-      WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-      exclusionMode: ExclusionMode.Ignore
-      exclusiveZone: 0
-      // Empty input region: clicks and scrolls go through to what is under.
-      mask: Region {}
-
-      Rectangle {
-        id: frame
-        anchors.fill: parent
-        color: "transparent"
-        border.width: root.cfg.width
-        border.color: Color.accent
-        opacity: root.active ? 1 : 0
-        Behavior on opacity {
-          enabled: !Style.reduceMotion
-          NumberAnimation { duration: 180 }
-        }
+    Rectangle {
+      anchors.fill: parent
+      color: Color.accent
+      // On at once, off with a short fade.
+      opacity: root.active ? 1 : 0
+      Behavior on opacity {
+        enabled: !root.active && !Style.reduceMotion
+        NumberAnimation { duration: 180 }
       }
     }
   }
+
+  Variants { model: Quickshell.screens; Edge { side: "top" } }
+  Variants { model: Quickshell.screens; Edge { side: "bottom" } }
+  Variants { model: Quickshell.screens; Edge { side: "left" } }
+  Variants { model: Quickshell.screens; Edge { side: "right" } }
 }
