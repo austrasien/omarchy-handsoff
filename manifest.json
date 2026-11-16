@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "austraz.handsoff",
+  "name": "Hands off",
+  "version": "0.1.0",
+  "author": "austrasien",
+  "license": "MIT",
+  "description": "Frames every screen in the theme accent while an agent drives the mouse or keyboard through hypruse, so the human knows not to touch them.",
+  "kinds": ["panel"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "HandsOff.qml"
+  }
+}
