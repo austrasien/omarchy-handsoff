@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# handsoff: light the frame (frame/shell.qml) while an agent drives the
+# desktop.
+#
+#   handsoff pulse            a desktop-driving command is about to run: the
+#                             frame shows for `hold` seconds (shims/)
+#   handsoff begin <id>       a tool call starts: on until `end` (hooks/)
+#   handsoff end <id>
+#   handsoff clear <prefix>   end every call whose id starts with <prefix>
+#   handsoff state            on | off
+#
+# begin and pulse wait for the frame before returning when it was off, so
+# it is up before the desktop moves. State lives in
+# $XDG_RUNTIME_DIR/handsoff: marks/<id> per call in progress, state.json
+# for the frame to read back after a restart. Marks older than 15 min are
+# dropped (a missed `end`).
+
+set -u
+export PATH="/usr/bin:/usr/local/bin:${PATH:-}"
+
+ROOT="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+FRAME="$ROOT/frame"
+DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/handsoff"
+MARKS="$DIR/marks"
+LEAD=0.15
+
+mkdir -p "$MARKS" 2>/dev/null || exit 0
+
+ipc() { timeout 1 qs -p "$FRAME" ipc call handsoff "$@" 2>/dev/null; }
+
+# Writes state.json and tells the frame; prints the previous call count.
+sync_state() {
+  local pulse=$1 n
+  (
+    flock -w 2 9 || exit 0
+    find "$MARKS" -type f -mmin +15 -delete 2>/dev/null
+    n=$(find "$MARKS" -type f | wc -l)
+    printf '{"active": %d, "pulse": %s}\n' "$n" "$pulse" >"$DIR/state.json.tmp" &&
+      mv "$DIR/state.json.tmp" "$DIR/state.json"
+    ipc calls "$n" >/dev/null
+  ) 9>"$DIR/lock"
+}
+
+# Wait for the frame only if it was off: a burst of calls pays it once.
+lead_if_off() {
+  [[ $1 == off ]] && sleep "$LEAD"
+  return 0
+}
+
+id_ok() { [[ $1 =~ ^[A-Za-z0-9_.-]+$ ]]; }
+
+cmd=${1:-}
+case "$cmd" in
+  pulse)
+    before=$(ipc state)
+    ipc pulse >/dev/null
+    printf '%s\n' "$(date +%s.%N)" >"$DIR/pulse" 2>/dev/null
+    lead_if_off "${before:-on}"
+    ;;
+  begin)
+    id_ok "${2:-}" || exit 0
+    before=$(ipc state)
+    : >"$MARKS/$2"
+    sync_state "$(date +%s)"
+    lead_if_off "${before:-on}"
+    ;;
+  end)
+    id_ok "${2:-}" || exit 0
+    [[ -e "$MARKS/$2" ]] || exit 0
+    rm -f "$MARKS/$2"
+    sync_state "$(date +%s)"
+    ;;
+  clear)
+    id_ok "${2:-}" || exit 0
+    rm -f "$MARKS/$2"* 2>/dev/null
+    sync_state 0
+    ;;
+  state)
+    ipc state || echo off
+    ;;
+  *)
+    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
+    exit 2
+    ;;
+esac
+exit 0

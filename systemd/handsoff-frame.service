@@ -1,0 +1,13 @@
+[Unit]
+Description=Hands off: frame the screens while an agent drives the desktop
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qs -p %h/src/omarchy-handsoff/frame
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

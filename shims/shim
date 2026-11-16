@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Stand-in for a desktop-driving tool (hyprctl, ydotool, wtype, wlrctl,
+# dotool, xdotool), first in the PATH of agent shells only (see
+# hooks/claude-code.sh). If this call drives the desktop it lights the
+# frame through `handsoff pulse`, then it runs the real tool, whatever the
+# outcome of the signal.
+
+name=${0##*/}
+self_dir=$(cd "$(dirname "$0")" && pwd)
+
+# The real tool: the next one on PATH, past this directory.
+real=""
+IFS=: read -ra dirs <<<"${PATH:-}"
+for d in "${dirs[@]}"; do
+  [[ -z $d || $(cd "$d" 2>/dev/null && pwd) == "$self_dir" ]] && continue
+  if [[ -x $d/$name && ! -d $d/$name ]]; then real=$d/$name; break; fi
+done
+[[ -n $real ]] || { echo "$name: not found" >&2; exit 127; }
+
+drives=0
+case "$name" in
+  hyprctl)
+    # dispatch, directly or in a --batch / -b list; reads stay quiet.
+    for a in "$@"; do
+      [[ $a == dispatch || $a == *"dispatch "* ]] && { drives=1; break; }
+    done
+    ;;
+  ydotool)
+    case "${1:-}" in key|type|click|mousemove|mousedown|mouseup) drives=1 ;; esac
+    ;;
+  xdotool)
+    case "${1:-}" in key*|type|click*|mouse*|windowactivate|windowfocus|set_desktop) drives=1 ;; esac
+    ;;
+  *) drives=1 ;;
+esac
+
+if (( drives )); then
+  "$self_dir/../bin/handsoff" pulse >/dev/null 2>&1 </dev/null
+fi
+exec "$real" "$@"
